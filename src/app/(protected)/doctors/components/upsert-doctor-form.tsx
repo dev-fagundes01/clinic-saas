@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { NumericFormat } from "react-number-format";
+import { useAction } from "next-safe-action/hooks";
 import {
   DialogContent,
   DialogDescription,
@@ -29,35 +30,45 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { medicalSpecialties } from "../constants";
+import { upsertDoctor } from "@/actions/upsert-doctor";
+import { toast } from 'sonner';
+import { Loader2Icon } from 'lucide-react';
 
-const formSchema = z.object({
-  name: z.string().trim().min(1, {
-    message: "Nome é obrigatório",
-  }),
-  specialty: z.string().trim().min(1, {
-    message: "Especialidade é obrigatória",
-  }),
-  appointmentPrice: z.number().min(1, {
-    message: "Preço da consulta é obrigatório",
-  }),
-  availableFromWeekDay: z.string(),
-  availableToWeekDay: z.string(),
-  availableFromTime: z.string().min(1, {
-    message: "Hora de início é obrigatória",
-  }),
-  availableToTime: z.string().min(1, {
-    message: "Hora de término é obrigatória",
-  }),
-}).refine((data) => {
-  return data.availableFromTime < data.availableToTime
-},
-{
-  message: "Hora de início deve ser menor que hora de término",
-  path: ["availableToTime"],
-}
-)
+const formSchema = z
+  .object({
+    name: z.string().trim().min(1, {
+      message: "Nome é obrigatório",
+    }),
+    specialty: z.string().trim().min(1, {
+      message: "Especialidade é obrigatória",
+    }),
+    appointmentPrice: z.number().min(1, {
+      message: "Preço da consulta é obrigatório",
+    }),
+    availableFromWeekDay: z.string(),
+    availableToWeekDay: z.string(),
+    availableFromTime: z.string().min(1, {
+      message: "Hora de início é obrigatória",
+    }),
+    availableToTime: z.string().min(1, {
+      message: "Hora de término é obrigatória",
+    }),
+  })
+  .refine(
+    (data) => {
+      return data.availableFromTime < data.availableToTime;
+    },
+    {
+      message: "Hora de início deve ser menor que hora de término",
+      path: ["availableToTime"],
+    },
+  );
 
-export default function UpsertDoctorForm() {
+  interface UpsertDoctorFormProps {
+    onSuccess?: () => void;
+  }
+
+export default function UpsertDoctorForm({ onSuccess }: UpsertDoctorFormProps) {
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -71,8 +82,23 @@ export default function UpsertDoctorForm() {
     },
   });
 
+  const upsertDoctorAction = useAction(upsertDoctor, {
+    onSuccess: () => {
+      toast.success("Médico adicionado com sucesso");
+      onSuccess?.();
+    },
+    onError: () => {
+      toast.error("Erro ao adicionar médico");
+    }
+  });
+
   const onSubmit = (values: z.infer<typeof formSchema>) => {
-    console.log(values);
+    upsertDoctorAction.execute({
+      ...values,
+      availableFromWeekDay: parseInt(values.availableFromWeekDay),
+      availableToWeekDay: parseInt(values.availableToWeekDay),
+      appointmentPriceInCents: values.appointmentPrice * 100,
+    })
   };
 
   return (
@@ -350,7 +376,15 @@ export default function UpsertDoctorForm() {
           />
 
           <DialogFooter>
-            <Button type="submit">Adicionar</Button>
+            <Button type="submit" disabled={
+              upsertDoctorAction.isPending
+            }>{
+              upsertDoctorAction.isPending ? (
+                <Loader2Icon className="w-4 h-4 animate-spin" />
+              ) : (
+                "Adicionar"
+              )
+            }</Button>
           </DialogFooter>
         </form>
       </Form>
